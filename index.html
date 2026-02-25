@@ -1,0 +1,649 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>RTA 31-band + Feedback Finder (Simple Pro)</title>
+  <style>
+    :root{
+      --bg:#0b0f14; --edge:#1d2a3d; --panel:#101826;
+      --text:#e8edf6; --muted:#a3b0c6;
+      --good:#26d08a; --warn:#ffb020; --bad:#ff4d4d;
+      --bar:#2ad38f; --peak:#ffb020; --focus:#ffb020;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; color:var(--text);
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;
+      background: radial-gradient(1100px 520px at 20% 0%, rgba(38,208,138,.10), transparent 55%),
+                  radial-gradient(900px 450px at 90% 0%, rgba(255,176,32,.10), transparent 55%),
+                  var(--bg);
+    }
+    .wrap{max-width:980px;margin:16px auto;padding:0 12px 18px}
+    .card{
+      background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02));
+      border:1px solid var(--edge);
+      border-radius:16px;
+      overflow:hidden;
+    }
+    .top{
+      display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;
+      padding:12px 12px;border-bottom:1px solid rgba(255,255,255,.06);
+    }
+    .title{font-weight:700;font-size:14px;letter-spacing:.2px}
+    .sub{font-size:12px;color:var(--muted);margin-top:2px}
+    .btns{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+    button, select{
+      border:1px solid var(--edge);
+      background: rgba(0,0,0,.20);
+      color:var(--text);
+      padding:10px 12px;border-radius:12px;
+      cursor:pointer;
+    }
+    button:disabled{opacity:.45;cursor:not-allowed}
+    select{padding-right:30px}
+    .row{
+      display:grid;grid-template-columns: 1.05fr .95fr;gap:12px;
+      padding:12px;
+    }
+    @media (max-width:860px){.row{grid-template-columns:1fr}}
+    .panel{
+      border:1px solid rgba(255,255,255,.06);
+      border-radius:14px;
+      background: rgba(0,0,0,.22);
+      padding:12px;
+    }
+    .big{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+    .hz{font-size:44px;font-weight:800;line-height:1}
+    .hz small{font-size:14px;color:var(--muted);font-weight:600}
+    .pill{
+      display:inline-flex;align-items:center;gap:8px;
+      padding:8px 10px;border-radius:999px;
+      font-size:12px;border:1px solid rgba(255,255,255,.10);
+      color:var(--muted);
+    }
+    .dot{width:10px;height:10px;border-radius:999px}
+    .dot.good{background:var(--good)}
+    .dot.warn{background:var(--warn)}
+    .dot.bad{background:var(--bad)}
+    .kv{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+    .k{font-size:12px;color:var(--muted);padding:7px 9px;border:1px solid rgba(255,255,255,.08);border-radius:12px;background:rgba(0,0,0,.18)}
+    .k b{color:var(--text)}
+    .hint{margin-top:10px;font-size:12px;color:var(--muted);line-height:1.35}
+    .controls{
+      display:grid;grid-template-columns: 1fr 1fr; gap:10px; margin-top:10px;
+    }
+    @media (max-width:520px){.controls{grid-template-columns:1fr}}
+    label{font-size:11px;color:var(--muted);display:block;margin-bottom:6px;letter-spacing:.3px;text-transform:uppercase}
+    input[type="range"]{width:100%}
+    .rtaWrap{padding:0 12px 12px}
+    .rtaHead{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 2px 8px}
+    .rtaHead .t{font-size:12px;color:var(--muted);letter-spacing:.6px;text-transform:uppercase}
+    canvas{width:100%;height:240px;display:block;border-top:1px solid rgba(255,255,255,.06);background: rgba(0,0,0,.20)}
+    .footer{padding:10px 12px;border-top:1px solid rgba(255,255,255,.06);font-size:12px;color:var(--muted)}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div class="top">
+      <div>
+        <div class="title">RTA 31-band + Feedback Finder</div>
+        <div class="sub">FAST/SLOW • Smoothing • Peak Hold • Feedback ổn định • FREEZE snapshot</div>
+      </div>
+      <div class="btns">
+        <button id="btnStart">START</button>
+        <button id="btnStop" disabled>STOP</button>
+        <button id="btnCal" disabled>CALIBRATE 3S</button>
+        <button id="btnFreeze" disabled>FREEZE</button>
+        <button id="btnUnfreeze" disabled>UNFREEZE</button>
+        <select id="weight">
+          <option value="fast">RTA Weight: FAST</option>
+          <option value="slow">RTA Weight: SLOW</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="panel">
+        <div class="big">
+          <div class="hz"><span id="hz">--</span> <small>Hz</small></div>
+          <div class="pill"><span id="dot" class="dot"></span><span id="stateText">Chưa chạy</span></div>
+        </div>
+
+        <div class="kv">
+          <div class="k">Band: <b id="band">--</b></div>
+          <div class="k">Loại: <b id="type">--</b></div>
+          <div class="k">Stable: <b id="stable">--</b></div>
+          <div class="k">Δ so với nền: <b id="delta">--</b> dB</div>
+        </div>
+
+        <div class="hint" id="actionHint">
+          Bấm START → CALIBRATE 3S khi chưa hú → Khi nghe hú, bấm FREEZE để chụp đúng khoảnh khắc.
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="controls">
+          <div>
+            <label>Độ nhạy (vừa phải)</label>
+            <input id="sens" type="range" min="1" max="10" value="6">
+            <div class="hint">Khuyến nghị: 5–6 để tần số không nhảy loạn.</div>
+          </div>
+          <div>
+            <label>Ngưỡng cảnh báo (dB vượt nền)</label>
+            <input id="th" type="range" min="3" max="20" value="9">
+            <div class="hint">Cao hơn = ít báo nhầm.</div>
+          </div>
+          <div>
+            <label>Min Hz (20–20000)</label>
+            <input id="minHz" type="range" min="20" max="20000" value="20">
+            <div class="hint mono"><span id="minHzV">20</span> Hz</div>
+          </div>
+          <div>
+            <label>Max Hz (20–20000)</label>
+            <input id="maxHz" type="range" min="20" max="20000" value="20000">
+            <div class="hint mono"><span id="maxHzV">20000</span> Hz</div>
+          </div>
+        </div>
+
+        <div class="hint" style="margin-top:8px">
+          Nếu “loạn”: giảm Sens xuống 5, chuyển RTA Weight = SLOW, và luôn CALIBRATE trước.
+        </div>
+      </div>
+    </div>
+
+    <div class="rtaWrap">
+      <div class="rtaHead">
+        <div class="t">RTA 31-band (cột xanh = mức hiện tại, vạch vàng = peak hold)</div>
+        <div class="mono" id="focus">Focus: --</div>
+      </div>
+      <canvas id="rta" width="1000" height="240"></canvas>
+    </div>
+
+    <div class="footer">
+      Điện thoại không xin được mic? → phải mở bằng <b>HTTPS</b> (GitHub Pages). Mở file trực tiếp thường bị chặn.
+    </div>
+  </div>
+</div>
+
+<script>
+/* ========= 31-band centers ========= */
+const BANDS = [20,25,31.5,40,50,63,80,100,125,160,200,250,315,400,500,630,800,1000,1250,1600,2000,2500,3150,4000,5000,6300,8000,10000,12500,16000,20000];
+
+/* ========= Audio state ========= */
+let audioCtx=null, analyser=null, stream=null, raf=null;
+let fft=null;
+let noiseFloor=null, calibrating=false, calAcc=null, calFrames=0;
+
+let frozen=false;
+let frozenSnap=null; // {hz, band, type, stable, deltaDb, rtaDb[], peakDb[]}
+
+/* ========= RTA state =========
+   rtaDb: smoothed band levels (relative dB)
+   peakDb: peak-hold with decay
+   baseDb: baseline after calibrate (per band)
+*/
+let rtaDb = new Array(BANDS.length).fill(-80);
+let peakDb = new Array(BANDS.length).fill(-80);
+let baseDb = new Array(BANDS.length).fill(-80);
+
+/* stability counters per band index */
+let stableCount = new Array(BANDS.length).fill(0);
+let lastFocusIdx = -1;
+
+/* ========= DOM ========= */
+const $=id=>document.getElementById(id);
+const btnStart=$("btnStart"), btnStop=$("btnStop"), btnCal=$("btnCal");
+const btnFreeze=$("btnFreeze"), btnUnfreeze=$("btnUnfreeze");
+const hzEl=$("hz"), bandEl=$("band"), typeEl=$("type"), stableEl=$("stable"), deltaEl=$("delta");
+const stateText=$("stateText"), dot=$("dot"), actionHint=$("actionHint");
+const sensEl=$("sens"), thEl=$("th"), minHzEl=$("minHz"), maxHzEl=$("maxHz");
+const minHzV=$("minHzV"), maxHzV=$("maxHzV");
+const weightEl=$("weight");
+const focusEl=$("focus");
+const cv=$("rta"), g=cv.getContext("2d");
+
+function setState(level, text){
+  stateText.textContent=text;
+  dot.className="dot " + (level||"");
+}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+function binHz(){ return audioCtx.sampleRate / analyser.fftSize; }
+function byteToDb(v){
+  const norm=v/255;
+  const db=20*Math.log10(Math.max(norm,1e-6));
+  return clamp(db,-100,0);
+}
+function classify(hz){
+  if(hz < 250) return "Ù ồ (Low)";
+  if(hz < 1000) return "Gằn (Low-mid)";
+  if(hz < 8000) return "Rít (Hi-mid)";
+  return "Xì (High)";
+}
+function nearestBand(hz){
+  let best=BANDS[0], di=Math.abs(hz-BANDS[0]), idx=0;
+  for(let i=0;i<BANDS.length;i++){
+    const d=Math.abs(hz-BANDS[i]);
+    if(d<di){di=d; best=BANDS[i]; idx=i;}
+  }
+  return {band:best, idx};
+}
+
+/* ========= 1/3 octave-ish integration around band center =========
+   Use FFT bins around center with a relative span; convert to relative dB.
+*/
+function bandEnergy(centerHz){
+  const bhz = binHz();
+  const iC = Math.max(1, Math.round(centerHz / bhz));
+  const span = Math.max(2, Math.round(iC * 0.085)); // ~bandwidth
+  const lo = Math.max(1, iC-span);
+  const hi = Math.min(fft.length-2, iC+span);
+
+  let sum=0, cnt=0, max=0;
+  for(let i=lo;i<=hi;i++){
+    let v=fft[i];
+    if(noiseFloor) v = Math.max(0, v-noiseFloor[i]);
+    sum += v; cnt++;
+    if(v>max) max=v;
+  }
+  const avg = cnt ? sum/cnt : 0;
+  return {avg, max};
+}
+
+function computeRtaFrame(){
+  // raw dB per band (relative)
+  const raw = new Array(BANDS.length).fill(-80);
+  const rawMax = new Array(BANDS.length).fill(-80);
+
+  for(let i=0;i<BANDS.length;i++){
+    const {avg, max} = bandEnergy(BANDS[i]);
+    raw[i] = byteToDb(avg);
+    rawMax[i] = byteToDb(max);
+  }
+  return {raw, rawMax};
+}
+
+/* ========= Time-weighting (FAST/SLOW) smoothing =========
+   FAST ~ 125ms, SLOW ~ 1s (approx)
+   We emulate with EMA alpha depending on dt + selected mode.
+*/
+let lastT = performance.now();
+function emaAlpha(dtMs){
+  const mode = weightEl.value; // fast/slow
+  const tau = (mode==="fast") ? 160 : 900; // ms
+  // alpha = 1 - exp(-dt/tau)
+  return 1 - Math.exp(-dtMs / tau);
+}
+
+/* ========= Peak hold decay ========= */
+function peakDecay(dtMs){
+  // decay about 12 dB per second (feel like RTA)
+  return (12 * (dtMs/1000));
+}
+
+/* ========= Feedback focus =========
+   Choose focus band by "delta over baseline" + "narrowness"
+*/
+function focusBandIndex(rawDb, rawMaxDb, sens){
+  // delta = level - baseline
+  let bestIdx = 0;
+  let bestScore = -1e9;
+
+  for(let i=0;i<BANDS.length;i++){
+    const d = rawDb[i] - baseDb[i];
+
+    // "narrowness": peak (max) much higher than avg in that band => tone-like
+    const narrow = rawMaxDb[i] - rawDb[i]; // dB
+    // for feedback, narrowness often present (sharp peak)
+    // we want narrow around ~2..12 dB; too wide (noise) lower
+    const narrowScore = clamp((narrow - 1.5) / 8.0, 0, 1);
+
+    // sens affects how much we care about delta
+    const deltaScore = d * (0.9 + sens*0.06);
+
+    const score = deltaScore + 6*narrowScore;
+    if(score > bestScore){
+      bestScore = score;
+      bestIdx = i;
+    }
+  }
+  return bestIdx;
+}
+
+/* ========= UI draw ========= */
+function drawRTA(levelDb, peakDbArr, focusIdx){
+  const w=cv.width, h=cv.height;
+  g.clearRect(0,0,w,h);
+
+  // grid
+  g.strokeStyle="rgba(255,255,255,.06)";
+  g.lineWidth=1;
+  for(let i=1;i<6;i++){
+    const y=i/6*h;
+    g.beginPath(); g.moveTo(0,y); g.lineTo(w,y); g.stroke();
+  }
+
+  // y scale: show -60..0 dB (relative)
+  const topDb = 0;
+  const botDb = -60;
+
+  const pad=14;
+  const bw = (w - pad*2) / BANDS.length;
+
+  function yFromDb(db){
+    const t = (db - botDb) / (topDb - botDb); // 0..1
+    return h-12 - clamp(t,0,1)*(h-24);
+  }
+
+  for(let i=0;i<BANDS.length;i++){
+    const x = pad + i*bw;
+
+    const isFocus = (i===focusIdx);
+    const barDb = clamp(levelDb[i], botDb, topDb);
+    const y = yFromDb(barDb);
+    const barH = (h-12) - y;
+
+    // bars
+    g.fillStyle = isFocus ? "rgba(255,176,32,.95)" : "rgba(42,211,143,.75)";
+    g.fillRect(x+2, y, Math.max(2,bw-4), barH);
+
+    // peak hold line
+    const p = clamp(peakDbArr[i], botDb, topDb);
+    const py = yFromDb(p);
+    g.strokeStyle = "rgba(255,176,32,.90)";
+    g.lineWidth = 2;
+    g.beginPath();
+    g.moveTo(x+2, py);
+    g.lineTo(x + Math.max(2,bw-2), py);
+    g.stroke();
+
+    // labels sparse
+    if(i%4===0){
+      g.fillStyle="rgba(255,255,255,.35)";
+      g.font="10px ui-monospace, Menlo, Consolas, monospace";
+      const band = BANDS[i];
+      const lab = band>=1000 ? (band/1000).toFixed(band%1000===0?0:1)+"k" : String(Math.round(band));
+      g.fillText(lab, x+2, h-2);
+    }
+  }
+}
+
+/* ========= Calibrate =========
+   Calibrate sets:
+   - noiseFloor for FFT bin subtraction (like earlier)
+   - baseDb baseline per band (relative)
+*/
+function calibrate(){
+  if(!audioCtx) return;
+  calibrating=true;
+  calAcc=null; calFrames=0;
+  setState("warn","Calibrate 3 giây…");
+  actionHint.textContent = "Giữ yên mic, hạn chế nói/nhạc. Calibrate giúp RTA ổn định & bắt feedback chuẩn hơn.";
+}
+
+/* ========= Freeze ========= */
+function freezeNow(){
+  if(!audioCtx || !analyser || !fft) return;
+  frozen=true;
+
+  // snapshot displayed focus + arrays
+  const idx = lastFocusIdx>=0 ? lastFocusIdx : 0;
+  const hz = Math.round(BANDS[idx]);
+  const deltaDb = Math.round((rtaDb[idx] - baseDb[idx])*10)/10;
+
+  frozenSnap = {
+    hz,
+    band: BANDS[idx],
+    type: classify(BANDS[idx]),
+    stable: stableCount[idx],
+    deltaDb,
+    rtaDb: [...rtaDb],
+    peakDb: [...peakDb],
+    focusIdx: idx
+  };
+
+  btnFreeze.disabled=true;
+  btnUnfreeze.disabled=false;
+
+  setState("bad","FREEZE – Đã giữ thời điểm hú");
+  actionHint.textContent = `Đã chụp: ~${hz} Hz (band ${BANDS[idx]}Hz), Δ≈${deltaDb} dB. Chỉnh EQ rồi UNFREEZE để đo lại.`;
+
+  // force draw snapshot
+  drawRTA(frozenSnap.rtaDb, frozenSnap.peakDb, frozenSnap.focusIdx);
+  focusEl.textContent = `Focus: ${BANDS[idx]}Hz`;
+  hzEl.textContent = hz;
+  bandEl.textContent = BANDS[idx] + "Hz";
+  typeEl.textContent = frozenSnap.type;
+  stableEl.textContent = frozenSnap.stable + "f";
+  deltaEl.textContent = frozenSnap.deltaDb;
+}
+
+function unfreeze(){
+  frozen=false;
+  frozenSnap=null;
+  btnFreeze.disabled=false;
+  btnUnfreeze.disabled=true;
+  setState("good","Đang đo…");
+  actionHint.textContent = "Đang đo. Khi nghe hú, bấm FREEZE để chụp đúng khoảnh khắc.";
+}
+
+/* ========= Start/Stop ========= */
+async function start(){
+  setState("warn","Xin quyền micro…");
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:false }
+    });
+  }catch(e){
+    setState("bad","Không lấy được micro (cần HTTPS / cấp quyền)");
+    actionHint.textContent = "Trên điện thoại: phải mở bằng HTTPS (GitHub Pages). Site settings → Microphone → Allow.";
+    return;
+  }
+
+  audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+  const src = audioCtx.createMediaStreamSource(stream);
+
+  // light HPF reduce rumble
+  const hp=audioCtx.createBiquadFilter();
+  hp.type="highpass"; hp.frequency.value=30; hp.Q.value=0.7;
+
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 32768;
+  analyser.smoothingTimeConstant = 0.0; // we do our own RTA smoothing
+
+  src.connect(hp);
+  hp.connect(analyser);
+
+  fft = new Uint8Array(analyser.frequencyBinCount);
+
+  // reset
+  noiseFloor=null; calibrating=false; calAcc=null; calFrames=0;
+  rtaDb.fill(-80); peakDb.fill(-80); baseDb.fill(-80);
+  stableCount.fill(0); lastFocusIdx=-1;
+  frozen=false; frozenSnap=null;
+
+  btnStart.disabled=true;
+  btnStop.disabled=false;
+  btnCal.disabled=false;
+  btnFreeze.disabled=false;
+  btnUnfreeze.disabled=true;
+
+  minHzV.textContent=minHzEl.value;
+  maxHzV.textContent=maxHzEl.value;
+
+  setState("good","Đang đo…");
+  actionHint.textContent = "CALIBRATE 3S khi chưa hú để có baseline. Khi hú, bấm FREEZE để chụp.";
+  lastT = performance.now();
+  loop();
+}
+
+function stop(){
+  if(raf) cancelAnimationFrame(raf);
+  raf=null;
+  if(audioCtx){ try{audioCtx.close();}catch{} audioCtx=null; }
+  if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
+  analyser=null; fft=null;
+
+  btnStart.disabled=false;
+  btnStop.disabled=true;
+  btnCal.disabled=true;
+  btnFreeze.disabled=true;
+  btnUnfreeze.disabled=true;
+
+  hzEl.textContent="--"; bandEl.textContent="--"; typeEl.textContent="--";
+  stableEl.textContent="--"; deltaEl.textContent="--";
+  focusEl.textContent="Focus: --";
+
+  setState("", "Chưa chạy");
+  actionHint.textContent = "Bấm START → CALIBRATE → Khi hú, bấm FREEZE để chụp.";
+  g.clearRect(0,0,cv.width,cv.height);
+}
+
+/* ========= Loop ========= */
+function loop(){
+  analyser.getByteFrequencyData(fft);
+
+  // calibrate noise floor via averaging FFT bins
+  if(calibrating){
+    if(!calAcc){ calAcc = new Float32Array(fft.length); calFrames=0; }
+    for(let i=0;i<fft.length;i++) calAcc[i]+=fft[i];
+    calFrames++;
+    if(calFrames>=180){
+      noiseFloor = new Uint8Array(fft.length);
+      for(let i=0;i<fft.length;i++) noiseFloor[i]=Math.round(calAcc[i]/calFrames);
+      calibrating=false; calAcc=null;
+
+      // compute baseline per band too
+      const {raw} = computeRtaFrame();
+      for(let i=0;i<BANDS.length;i++) baseDb[i] = raw[i];
+
+      setState("good","Calibrate xong");
+      actionHint.textContent = "Baseline đã ghi. Bây giờ RTA hiển thị Δ so với nền, bắt feedback chuẩn hơn.";
+    }
+  }
+
+  // if frozen, keep drawing snapshot only (no UI changes)
+  if(frozen && frozenSnap){
+    raf = requestAnimationFrame(loop);
+    return;
+  }
+
+  const sens = Number(sensEl.value||6);
+  const th = Number(thEl.value||9);
+  const minHz = Number(minHzEl.value||20);
+  const maxHz = Number(maxHzEl.value||20000);
+  minHzV.textContent = minHz;
+  maxHzV.textContent = maxHz;
+
+  // dt and smoothing
+  const now = performance.now();
+  const dt = now - lastT;
+  lastT = now;
+  const a = emaAlpha(dt);
+  const decay = peakDecay(dt);
+
+  // compute raw per band
+  const {raw, rawMax} = computeRtaFrame();
+
+  // apply range limits by reducing bands outside range
+  const limitedRaw = raw.map((v,i)=>{
+    const f=BANDS[i];
+    if(f < Math.min(minHz,maxHz) || f > Math.max(minHz,maxHz)) return -80;
+    return v;
+  });
+  const limitedRawMax = rawMax.map((v,i)=>{
+    const f=BANDS[i];
+    if(f < Math.min(minHz,maxHz) || f > Math.max(minHz,maxHz)) return -80;
+    return v;
+  });
+
+  // smooth rtaDb, update peak hold
+  for(let i=0;i<BANDS.length;i++){
+    // EMA smoothing (RTA time weighting)
+    rtaDb[i] = (1-a)*rtaDb[i] + a*limitedRaw[i];
+
+    // peak hold: update if higher, else decay
+    peakDb[i] = Math.max(peakDb[i] - decay, rtaDb[i]);
+  }
+
+  // pick focus band like RTA: delta over baseline + narrowness
+  let idx = focusBandIndex(limitedRaw, limitedRawMax, sens);
+
+  // if focus out of range, clamp to nearest in range by scanning
+  const lo=Math.min(minHz,maxHz), hi=Math.max(minHz,maxHz);
+  if(!(BANDS[idx]>=lo && BANDS[idx]<=hi)){
+    // choose best inside range by scanning
+    let best=idx, bestScore=-1e9;
+    for(let i=0;i<BANDS.length;i++){
+      if(BANDS[i]<lo || BANDS[i]>hi) continue;
+      const d = limitedRaw[i]-baseDb[i];
+      const narrow = limitedRawMax[i]-limitedRaw[i];
+      const narrowScore = clamp((narrow-1.5)/8,0,1);
+      const score = d*(0.9+sens*0.06) + 6*narrowScore;
+      if(score>bestScore){bestScore=score; best=i;}
+    }
+    idx=best;
+  }
+
+  // stability: focus must stay same band to count up
+  if(idx === lastFocusIdx) stableCount[idx] = Math.min(999, stableCount[idx]+1);
+  else{
+    // decay all a bit, set new focus to 1
+    for(let i=0;i<stableCount.length;i++){
+      if(stableCount[i]>0) stableCount[i] = Math.max(0, stableCount[i]-1);
+    }
+    stableCount[idx] = Math.max(stableCount[idx], 1);
+    lastFocusIdx = idx;
+  }
+
+  const focusHz = BANDS[idx];
+  const deltaDb = (rtaDb[idx] - baseDb[idx]);
+  const deltaRound = Math.round(deltaDb*10)/10;
+
+  // update UI
+  hzEl.textContent = Math.round(focusHz);
+  bandEl.textContent = focusHz + "Hz";
+  typeEl.textContent = classify(focusHz);
+  stableEl.textContent = stableCount[idx] + "f";
+  deltaEl.textContent = isFinite(deltaRound) ? deltaRound : "--";
+  focusEl.textContent = `Focus: ${focusHz}Hz`;
+
+  // feedback alert rule (RTA-like):
+  // - delta above threshold
+  // - stable enough
+  // - also band peak looks tone-like (max-avg narrowness)
+  const narrow = limitedRawMax[idx] - limitedRaw[idx]; // dB
+  const toneLike = narrow >= 2.0; // simple heuristic
+  const needStable = (weightEl.value==="slow") ? 14 : 10;
+
+  if(deltaDb >= th && stableCount[idx] >= needStable && toneLike){
+    setState("bad","CÓ KHẢ NĂNG HÚ!");
+    actionHint.textContent = `Hú nghi nhất: ~${Math.round(focusHz)} Hz (Δ≈${deltaRound} dB). Bấm FREEZE để chụp & chỉnh EQ band ${focusHz}Hz.`;
+  } else if(deltaDb >= th*0.7 && stableCount[idx] >= Math.max(6, needStable-4)){
+    setState("warn","Nghi ngờ hú");
+    actionHint.textContent = `Có thể hú quanh ${Math.round(focusHz)} Hz. Nếu bạn nghe rõ, bấm FREEZE để chụp.`;
+  } else {
+    setState("good","Đang đo…");
+  }
+
+  // draw RTA
+  drawRTA(rtaDb, peakDb, idx);
+
+  raf = requestAnimationFrame(loop);
+}
+
+/* ========= Events ========= */
+btnStart.addEventListener("click", start);
+btnStop.addEventListener("click", stop);
+btnCal.addEventListener("click", calibrate);
+btnFreeze.addEventListener("click", freezeNow);
+btnUnfreeze.addEventListener("click", unfreeze);
+minHzEl.addEventListener("input",()=>minHzV.textContent=minHzEl.value);
+maxHzEl.addEventListener("input",()=>maxHzV.textContent=maxHzEl.value);
+
+setState("", "Chưa chạy");
+</script>
+</body>
+</html>
